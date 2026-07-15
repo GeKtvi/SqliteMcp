@@ -1,0 +1,36 @@
+---
+description: SqliteMcp architecture, connection dictionary, and tool conventions
+alwaysApply: true
+---
+
+# SqliteMcp project rules
+
+## Architecture
+
+- Stdio MCP server using `ModelContextProtocol` + `Microsoft.Data.Sqlite`.
+- All connections go through singleton `SqliteConnectionManager` (keyed dictionary).
+- Tools in `Tools/` stay thin; quoting/validation/SQL execution live in `Sql/`.
+
+## Connection rules
+
+- Default key name: `default`.
+- Startup `--default-db` / `DefaultDbPath` stores path only; do not open until first need or `open_db`.
+- No `connectionKey` + default configured → lazy-open `default`.
+- No `connectionKey` + no default → error.
+- With `connectionKey` → dictionary lookup only; missing key → error.
+- `open_db`: same key + different path → error; same path → reuse.
+- `close_db` / `close_all` dispose connections to release file locks; keep configured default path after close.
+
+## Tool conventions
+
+- Optional `connectionKey` on every DB tool.
+- Return pretty-printed JSON strings from tools.
+- Reject empty `conditions` on update/delete.
+- Validate table/column names for CRUD; quote identifiers.
+- Never log to stdout; use stderr logging only (`LogToStandardErrorThreshold`).
+
+## When adding tools
+
+- Mark types with `[McpServerToolType]` and methods with `[McpServerTool]`.
+- Resolve connections via `SqliteConnectionManager.GetConnection` / `Open` / `Close`.
+- Keep descriptions accurate; warn clearly on destructive tools (`close_all`).
