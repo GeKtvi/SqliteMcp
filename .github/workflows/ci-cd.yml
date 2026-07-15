@@ -1,0 +1,128 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Test
+        run: dotnet test --no-build -c Release --verbosity normal
+
+  publish:
+    needs: test
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+            publish_type: aot
+          - os: ubuntu-latest
+            rid: linux-x64
+            publish_type: framework-dependent
+          - os: windows-latest
+            rid: win-x64
+            publish_type: aot
+          - os: windows-latest
+            rid: win-x64
+            publish_type: framework-dependent
+          - os: macos-latest
+            rid: osx-x64
+            publish_type: aot
+          - os: macos-latest
+            rid: osx-x64
+            publish_type: framework-dependent
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish AOT
+        if: matrix.publish_type == 'aot'
+        run: >
+          dotnet publish src/SqliteMcp/SqliteMcp.csproj
+          -c Release
+          -r ${{ matrix.rid }}
+          /p:PublishAot=true
+          --self-contained true
+
+      - name: Publish Framework-Dependent
+        if: matrix.publish_type == 'framework-dependent'
+        run: >
+          dotnet publish src/SqliteMcp/SqliteMcp.csproj
+          -c Release
+          -r ${{ matrix.rid }}
+          /p:PublishAot=false
+          --self-contained false
+
+      - name: Include PATH helper + package
+        shell: bash
+        run: |
+          set -euo pipefail
+          RID="${{ matrix.rid }}"
+          TYPE="${{ matrix.publish_type }}"
+          PUBLISH="src/SqliteMcp/bin/Release/net10.0/${RID}/publish"
+          ARCHIVE="mcp-server-${RID}-${TYPE}.zip"
+
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            cp scripts/windows/add-to-path.ps1 scripts/windows/add-to-path.cmd "$PUBLISH/"
+            powershell -NoProfile -Command \
+              "Compress-Archive -Path (Join-Path '${PUBLISH}' '*') -DestinationPath '${ARCHIVE}' -Force"
+          else
+            cp scripts/unix/add-to-path.sh "$PUBLISH/"
+            chmod +x "$PUBLISH/add-to-path.sh"
+            if [[ -f "$PUBLISH/SqliteMcp" ]]; then
+              chmod +x "$PUBLISH/SqliteMcp"
+            fi
+            (cd "$PUBLISH" && zip -r "$GITHUB_WORKSPACE/${ARCHIVE}" .)
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-server-${{ matrix.rid }}-${{ matrix.publish_type }}
+          path: mcp-server-${{ matrix.rid }}-${{ matrix.publish_type }}.zip
+
+  release:
+    needs: publish
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: mcp-server-*.zip
+          generate_release_notes: true
