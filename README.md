@@ -1,6 +1,13 @@
 # SqliteMcp
 
-Cross-platform C# stdio [MCP](https://modelcontextprotocol.io/) server for SQLite (Windows, Linux, macOS). A port of [mcp-sqlite](https://github.com/) with an explicit multi-connection lifecycle so database files can be closed and unlocked when agents need to delete, move, or replace them.
+Cross-platform C# stdio [MCP](https://modelcontextprotocol.io/) server for SQLite (Windows, Linux, macOS). A port of [mcp-sqlite](https://github.com/jparkerweb/mcp-sqlite) with keyed multi-DB connections and an explicit connection lifecycle so database files can be closed and unlocked when agents need to delete, move, or replace them — or when the DB is part of a git repo and must be free for checkout/pull (the motivating case for this port).
+
+This project is designed for my own use, but anyone is welcome to use it. Feel free to open issues or pull requests if you want to.
+
+## Requirements
+
+- **Build:** [.NET 10](https://dotnet.microsoft.com/download) SDK
+- **Run:** .NET 10 runtime (framework-dependent publish), or a Native AOT binary with no runtime install
 
 ## Features
 - Keyed connection dictionary (`connectionKey` → open `SqliteConnection`)
@@ -124,3 +131,7 @@ All data tools accept optional `connectionKey`.
 2. `open_db` path=`other.db` connectionKey=`analytics`
 3. `query` sql=`SELECT ...` connectionKey=`analytics`
 4. `close_db` connectionKey=`analytics` when the file must be unlocked
+
+## License
+
+MIT — see [LICENSE](LICENSE).
