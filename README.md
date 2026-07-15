@@ -16,12 +16,35 @@ Cross-platform C# stdio [MCP](https://modelcontextprotocol.io/) server for SQLit
 - **File locks:** `close_db` / `close_all` release SQLite handles on all platforms; this is especially noticeable on Windows, where an open handle often blocks delete/move until closed
 
 ## Build
+
 ```bash
 dotnet build src/SqliteMcp/SqliteMcp.csproj
+dotnet test tests/SqliteMcp.Tests/SqliteMcp.Tests.csproj
+```
+
+### Framework-dependent publish
+
+```bash
 dotnet publish src/SqliteMcp/SqliteMcp.csproj -c Release -o publish
 ```
 
-Published executable: `publish/SqliteMcp` (Linux/macOS) or `publish/SqliteMcp.exe` (Windows).
+Published executable: `publish/SqliteMcp` (Linux/macOS) or `publish/SqliteMcp.exe` (Windows). Requires .NET 10 runtime on the host.
+
+### Native AOT publish (single-file, no runtime)
+
+The project sets `PublishAot=true`. Native publish produces a self-contained binary (no .NET runtime required).
+
+**Windows prerequisites:** Visual Studio 2022 Build Tools with **Desktop development with C++** (MSVC + Windows SDK).
+
+```bash
+dotnet publish src/SqliteMcp/SqliteMcp.csproj -c Release -r win-x64
+# Linux:  -r linux-x64
+# macOS:  -r osx-arm64  or  -r osx-x64
+```
+
+Output: `src/SqliteMcp/bin/Release/net10.0/<rid>/publish/SqliteMcp(.exe)`.
+
+Tool JSON uses source-generated `AppJsonContext`; MCP tools are registered explicitly via `WithTools<T>` (required for AOT — no assembly scanning).
 
 ## Cursor / MCP config
 

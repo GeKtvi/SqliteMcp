@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.Data.Sqlite;
+using SqliteMcp.Json;
 
 namespace SqliteMcp;
 
@@ -125,7 +126,7 @@ public sealed class SqliteConnectionManager : IDisposable
     /// Disposes one connection and removes it from the dictionary, unlocking the file.
     /// Omitting the key targets the default slot. Configured <see cref="DefaultPath"/> is kept.
     /// </summary>
-    public object Close(string? connectionKey = null)
+    public CloseDbResult Close(string? connectionKey = null)
     {
         lock (_gate)
         {
@@ -151,53 +152,44 @@ public sealed class SqliteConnectionManager : IDisposable
             }
 
             entry.Dispose();
-            return new
-            {
-                message = $"Closed connection '{key}'.",
-                connectionKey = key,
-                path = entry.Path
-            };
+            return new CloseDbResult(
+                $"Closed connection '{key}'.",
+                key,
+                entry.Path);
         }
     }
 
     /// <summary>
     /// Disposes every open connection. Does not clear <see cref="DefaultPath"/>.
     /// </summary>
-    public object CloseAll()
+    public CloseAllResult CloseAll()
     {
         lock (_gate)
         {
-            var closed = new List<object>();
+            var closed = new List<ClosedConnectionInfo>();
             foreach (var key in _connections.Keys.ToArray())
             {
                 if (_connections.TryRemove(key, out var entry))
                 {
-                    closed.Add(new { connectionKey = key, path = entry.Path });
+                    closed.Add(new ClosedConnectionInfo(key, entry.Path));
                     entry.Dispose();
                 }
             }
 
-            return new
-            {
-                message = $"Closed {closed.Count} connection(s). All file locks released.",
-                closed
-            };
+            return new CloseAllResult(
+                $"Closed {closed.Count} connection(s). All file locks released.",
+                closed);
         }
     }
 
     /// <summary>
     /// Returns open connection keys and paths for agent observability.
     /// </summary>
-    public IReadOnlyList<object> ListConnections()
+    public IReadOnlyList<ConnectionInfo> ListConnections()
     {
         return _connections.Values
             .OrderBy(e => e.Key, StringComparer.Ordinal)
-            .Select(e => (object)new
-            {
-                connectionKey = e.Key,
-                path = e.Path,
-                isDefault = e.Key == DefaultKey
-            })
+            .Select(e => new ConnectionInfo(e.Key, e.Path, e.Key == DefaultKey))
             .ToList();
     }
 

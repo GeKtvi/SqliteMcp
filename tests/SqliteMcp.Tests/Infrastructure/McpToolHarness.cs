@@ -9,13 +9,12 @@ namespace SqliteMcp.Tests.Infrastructure;
 /// </summary>
 public sealed class McpToolHarness : IDisposable
 {
-    private readonly string _tempDirectory;
     private bool _disposed;
 
     private McpToolHarness(SqliteConnectionManager connections, string tempDirectory)
     {
         Connections = connections;
-        _tempDirectory = tempDirectory;
+        TempDirectory = tempDirectory;
         Lifecycle = new DatabaseLifecycleTools(connections);
         Query = new QueryTools(connections);
         Schema = new SchemaTools(connections);
@@ -47,9 +46,9 @@ public sealed class McpToolHarness : IDisposable
         return new McpToolHarness(new SqliteConnectionManager(), tempDirectory);
     }
 
-    public string DbPath(string fileName = "default.db") => Path.Combine(_tempDirectory, fileName);
+    public string DbPath(string fileName = "default.db") => Path.Combine(TempDirectory, fileName);
 
-    public string TempDirectory => _tempDirectory;
+    public string TempDirectory { get; }
 
     public void Dispose()
     {
@@ -63,9 +62,9 @@ public sealed class McpToolHarness : IDisposable
 
         try
         {
-            if (Directory.Exists(_tempDirectory))
+            if (Directory.Exists(TempDirectory))
             {
-                Directory.Delete(_tempDirectory, recursive: true);
+                Directory.Delete(TempDirectory, recursive: true);
             }
         }
         catch (IOException)

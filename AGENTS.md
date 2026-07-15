@@ -22,3 +22,10 @@ Call `close_db` or `close_all` before deleting/moving a DB file (required on all
 - Never write logs to stdout (stdio MCP); logging goes to stderr only.
 - CRUD must validate table/column names and reject empty update/delete conditions.
 - Do not invent MCP “sessions” on top of stdio; keys are connection handles, not chat sessions.
+
+## AOT / JSON
+
+- `PublishAot=true` in the project; register tools with explicit `.WithTools<T>(AppJsonContext.Default.Options)` in `Program.cs`.
+- Tool responses use typed DTOs in `Json/ToolResponses.cs` + `[JsonSerializable]` on `AppJsonContext`.
+- Register MCP tool parameter types on `AppJsonContext` too (e.g. `string`, `double?`, `JsonElement?`).
+- Dynamic query rows use `JsonNode` in `SqliteCommandRunner`; fixed-shape results use source-gen `ToJson<T>`.

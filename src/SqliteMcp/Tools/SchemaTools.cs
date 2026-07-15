@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
+using SqliteMcp.Json;
 using SqliteMcp.Sql;
 
 namespace SqliteMcp.Tools;
@@ -27,14 +28,14 @@ public sealed class SchemaTools(SqliteConnectionManager connections)
 
         if (tables.Count == 0)
         {
-            return SqliteCommandRunner.ToJson(new
-            {
-                message = "No tables found in database",
-                connectionKey = entry.Key,
-                dbPath = entry.Path,
-                exists = File.Exists(entry.Path),
-                size = File.Exists(entry.Path) ? new FileInfo(entry.Path).Length : 0
-            });
+            return SqliteCommandRunner.ToJson(
+                new EmptyTablesResult(
+                    "No tables found in database",
+                    entry.Key,
+                    entry.Path,
+                    File.Exists(entry.Path),
+                    File.Exists(entry.Path) ? new FileInfo(entry.Path).Length : 0),
+                AppJsonContext.Default.EmptyTablesResult);
         }
 
         return SqliteCommandRunner.ToJson(tables);

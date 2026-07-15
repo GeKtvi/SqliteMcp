@@ -1,43 +1,48 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 using Microsoft.Data.Sqlite;
+using SqliteMcp.Json;
 
 namespace SqliteMcp.Sql;
 
 /// <summary>
-/// Executes parameterized SQL and serializes results for MCP tool responses.
+/// Executes parameterized SQL and serializes results for MCP tool responses (AOT-safe).
 /// </summary>
 public static class SqliteCommandRunner
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerOptions NodeWriteOptions = new()
     {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        WriteIndented = true
     };
 
-    /// <summary>Serializes a value as indented camelCase JSON text.</summary>
-    public static string ToJson(object value) => JsonSerializer.Serialize(value, JsonOptions);
+    /// <summary>Serializes a fixed response DTO using source-generated metadata.</summary>
+    public static string ToJson<T>(T value, JsonTypeInfo<T> typeInfo) =>
+        JsonSerializer.Serialize(value, typeInfo);
+
+    /// <summary>Serializes a <see cref="JsonNode"/> tree without reflection-based type discovery.</summary>
+    public static string ToJson(JsonNode node) => node.ToJsonString(NodeWriteOptions);
 
     /// <summary>
-    /// Runs a query (typically SELECT) and returns rows as dictionaries.
-    /// Supports <c>?</c> placeholders rewritten to named parameters.
+    /// Runs a query and returns rows as a JSON array of objects.
     /// </summary>
-    public static List<Dictionary<string, object?>> Query(
+    public static JsonArray Query(
         SqliteConnection connection,
         string sql,
         IReadOnlyList<object?>? values = null)
     {
         using var cmd = CreateCommand(connection, sql, values);
-        var rows = new List<Dictionary<string, object?>>();
+        var rows = new JsonArray();
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
-            var row = new Dictionary<string, object?>(StringComparer.Ordinal);
+            var row = new JsonObject();
             for (var i = 0; i < reader.FieldCount; i++)
             {
-                row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                row[reader.GetName(i)] = ToJsonNode(reader.IsDBNull(i) ? null : reader.GetValue(i));
             }
 
-            rows.Add(row);
+            rows.Add((JsonNode)row);
         }
 
         return rows;
@@ -46,7 +51,7 @@ public static class SqliteCommandRunner
     /// <summary>
     /// Runs a non-query statement and returns affected row count plus <c>last_insert_rowid()</c>.
     /// </summary>
-    public static (int Changes, long LastInsertRowId) Execute(
+    public static DmlResult Execute(
         SqliteConnection connection,
         string sql,
         IReadOnlyList<object?>? values = null)
@@ -65,7 +70,7 @@ public static class SqliteCommandRunner
             }
         }
 
-        return (changes, lastInsertRowId);
+        return new DmlResult(changes, lastInsertRowId);
     }
 
     /// <summary>
@@ -79,6 +84,20 @@ public static class SqliteCommandRunner
             || trimmed.StartsWith("WITH", StringComparison.OrdinalIgnoreCase)
             || trimmed.StartsWith("EXPLAIN", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static JsonNode? ToJsonNode(object? value) => value switch
+    {
+        null => null,
+        string s => JsonValue.Create(s),
+        bool b => JsonValue.Create(b),
+        byte or sbyte or short or ushort or int or uint or long or ulong => JsonValue.Create(Convert.ToInt64(value)),
+        float or double or decimal => JsonValue.Create(Convert.ToDouble(value)),
+        byte[] bytes => JsonValue.Create(Convert.ToBase64String(bytes)),
+        DateTime dt => JsonValue.Create(dt),
+        DateTimeOffset dto => JsonValue.Create(dto),
+        Guid g => JsonValue.Create(g.ToString()),
+        _ => JsonValue.Create(Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture))
+    };
 
     /// <summary>
     /// Builds a command with <c>?</c> placeholders rewritten to <c>$p0</c>, <c>$p1</c>, …

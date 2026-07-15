@@ -10,6 +10,7 @@ alwaysApply: true
 - Stdio MCP server using `ModelContextProtocol` + `Microsoft.Data.Sqlite`.
 - All connections go through singleton `SqliteConnectionManager` (keyed dictionary).
 - Tools in `Tools/` stay thin; quoting/validation/SQL execution live in `Sql/`.
+- Native AOT: explicit `WithTools<T>` in `Program.cs`; JSON via `AppJsonContext` source generation (`Json/ToolResponses.cs`).
 
 ## Connection rules
 
@@ -32,5 +33,7 @@ alwaysApply: true
 ## When adding tools
 
 - Mark types with `[McpServerToolType]` and methods with `[McpServerTool]`.
+- Register the tool class in `Program.cs` via `.WithTools<YourTools>(AppJsonContext.Default.Options)`.
+- Add response DTOs + `[JsonSerializable(typeof(...))]` to `AppJsonContext`; add tool parameter types too if AOT fails at startup.
 - Resolve connections via `SqliteConnectionManager.GetConnection` / `Open` / `Close`.
 - Keep descriptions accurate; warn clearly on destructive tools (`close_all`).

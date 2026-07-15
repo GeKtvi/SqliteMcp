@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
+using SqliteMcp.Json;
 using SqliteMcp.Sql;
 
 namespace SqliteMcp.Tools;
@@ -21,13 +22,13 @@ public sealed class DatabaseLifecycleTools(SqliteConnectionManager connections)
         [Description("Connection key for this database. Omit to use 'default'.")] string? connectionKey = null)
     {
         var entry = connections.Open(path, connectionKey);
-        return SqliteCommandRunner.ToJson(new
-        {
-            message = "Database opened.",
-            connectionKey = entry.Key,
-            path = entry.Path,
-            isDefault = entry.Key == SqliteConnectionManager.DefaultKey
-        });
+        return SqliteCommandRunner.ToJson(
+            new OpenDbResult(
+                "Database opened.",
+                entry.Key,
+                entry.Path,
+                entry.Key == SqliteConnectionManager.DefaultKey),
+            AppJsonContext.Default.OpenDbResult);
     }
 
     /// <summary>Closes one connection and releases its file lock.</summary>
@@ -37,7 +38,9 @@ public sealed class DatabaseLifecycleTools(SqliteConnectionManager connections)
     public string CloseDb(
         [Description("Connection key to close. Omit to close 'default'.")] string? connectionKey = null)
     {
-        return SqliteCommandRunner.ToJson(connections.Close(connectionKey));
+        return SqliteCommandRunner.ToJson(
+            connections.Close(connectionKey),
+            AppJsonContext.Default.CloseDbResult);
     }
 
     /// <summary>Closes every open connection. Destructive for concurrent keyed work.</summary>
@@ -46,7 +49,9 @@ public sealed class DatabaseLifecycleTools(SqliteConnectionManager connections)
         "Configured default path is kept for later lazy reopen. Use close_db to close a single connection.")]
     public string CloseAll()
     {
-        return SqliteCommandRunner.ToJson(connections.CloseAll());
+        return SqliteCommandRunner.ToJson(
+            connections.CloseAll(),
+            AppJsonContext.Default.CloseAllResult);
     }
 
     /// <summary>Lists open keys, paths, and configured default path.</summary>
@@ -54,11 +59,9 @@ public sealed class DatabaseLifecycleTools(SqliteConnectionManager connections)
         "List all currently open database connections (keys, paths, and which is default).")]
     public string ListConnections()
     {
-        return SqliteCommandRunner.ToJson(new
-        {
-            defaultPath = connections.DefaultPath,
-            connections = connections.ListConnections()
-        });
+        return SqliteCommandRunner.ToJson(
+            new ListConnectionsResult(connections.DefaultPath, connections.ListConnections()),
+            AppJsonContext.Default.ListConnectionsResult);
     }
 
     /// <summary>Returns path, size, and table count for a connection.</summary>
@@ -79,22 +82,17 @@ public sealed class DatabaseLifecycleTools(SqliteConnectionManager connections)
             lastModified = info.LastWriteTimeUtc;
         }
 
-        var tableCount = SqliteCommandRunner.Query(
+        var tableCountRows = SqliteCommandRunner.Query(
             entry.Connection,
             """
             SELECT count(*) AS count FROM sqlite_master
             WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
             """);
 
-        return SqliteCommandRunner.ToJson(new
-        {
-            connectionKey = entry.Key,
-            dbPath,
-            exists,
-            size,
-            lastModified,
-            tableCount = Convert.ToInt64(tableCount[0]["count"]),
-            isOpen = true
-        });
+        var tableCount = tableCountRows[0]?["count"]?.GetValue<long>() ?? 0;
+
+        return SqliteCommandRunner.ToJson(
+            new DbInfoResult(entry.Key, dbPath, exists, size, lastModified, tableCount, IsOpen: true),
+            AppJsonContext.Default.DbInfoResult);
     }
 }

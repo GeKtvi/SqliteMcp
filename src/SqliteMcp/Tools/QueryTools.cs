@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
+using SqliteMcp.Json;
 using SqliteMcp.Sql;
 
 namespace SqliteMcp.Tools;
@@ -29,8 +30,8 @@ public sealed class QueryTools(SqliteConnectionManager connections)
             return SqliteCommandRunner.ToJson(rows);
         }
 
-        var (changes, lastInsertRowId) = SqliteCommandRunner.Execute(entry.Connection, sql, bound);
-        return SqliteCommandRunner.ToJson(new { changes, lastInsertRowId });
+        var result = SqliteCommandRunner.Execute(entry.Connection, sql, bound);
+        return SqliteCommandRunner.ToJson(result, AppJsonContext.Default.DmlResult);
     }
 
     /// <summary>Converts an optional JSON array of SQL parameter values to CLR objects.</summary>

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
+using SqliteMcp.Json;
 using SqliteMcp.Sql;
 
 namespace SqliteMcp.Tools;
@@ -35,16 +36,14 @@ public sealed class CrudTools(SqliteConnectionManager connections)
         var sql =
             $"INSERT INTO {IdentifierGuard.QuoteIdentifier(table)} ({quotedColumns}) VALUES ({placeholders})";
 
-        var (_, lastInsertRowId) = SqliteCommandRunner.Execute(
+        var result = SqliteCommandRunner.Execute(
             entry.Connection,
             sql,
             columns.Select(c => record[c]).ToList());
 
-        return SqliteCommandRunner.ToJson(new
-        {
-            message = "Record created successfully",
-            insertedId = lastInsertRowId
-        });
+        return SqliteCommandRunner.ToJson(
+            new CreateRecordResult("Record created successfully", result.LastInsertRowId),
+            AppJsonContext.Default.CreateRecordResult);
     }
 
     /// <summary>Selects rows with optional equality filters, limit, and offset.</summary>
@@ -148,12 +147,10 @@ public sealed class CrudTools(SqliteConnectionManager connections)
             $"UPDATE {IdentifierGuard.QuoteIdentifier(table)} SET {string.Join(", ", setParts)} " +
             $"WHERE {string.Join(" AND ", whereParts)}";
 
-        var (changes, _) = SqliteCommandRunner.Execute(entry.Connection, sql, values);
-        return SqliteCommandRunner.ToJson(new
-        {
-            message = "Records updated successfully",
-            rowsAffected = changes
-        });
+        var result = SqliteCommandRunner.Execute(entry.Connection, sql, values);
+        return SqliteCommandRunner.ToJson(
+            new RowsAffectedResult("Records updated successfully", result.Changes),
+            AppJsonContext.Default.RowsAffectedResult);
     }
 
     /// <summary>Deletes rows; refuses empty conditions to avoid full-table deletes.</summary>
@@ -187,11 +184,9 @@ public sealed class CrudTools(SqliteConnectionManager connections)
         var sql =
             $"DELETE FROM {IdentifierGuard.QuoteIdentifier(table)} WHERE {string.Join(" AND ", whereParts)}";
 
-        var (changes, _) = SqliteCommandRunner.Execute(entry.Connection, sql, values);
-        return SqliteCommandRunner.ToJson(new
-        {
-            message = "Records deleted successfully",
-            rowsAffected = changes
-        });
+        var result = SqliteCommandRunner.Execute(entry.Connection, sql, values);
+        return SqliteCommandRunner.ToJson(
+            new RowsAffectedResult("Records deleted successfully", result.Changes),
+            AppJsonContext.Default.RowsAffectedResult);
     }
 }

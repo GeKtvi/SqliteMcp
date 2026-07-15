@@ -1,17 +1,16 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SqliteMcp;
+using SqliteMcp.Json;
+using SqliteMcp.Tools;
 
-HostApplicationBuilder? builder = Host.CreateApplicationBuilder(args);
+var builder = Host.CreateApplicationBuilder(args);
 
 // MCP uses stdout for JSON-RPC; keep all logs on stderr.
-builder.Logging.AddConsole(options =>
-{
-    options.LogToStandardErrorThreshold = LogLevel.Trace;
-});
+builder.Logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
 
-string? defaultDbPath = DefaultDbPathResolver.Resolve(builder.Configuration, args);
+var defaultDbPath = DefaultDbPathResolver.Resolve(builder.Configuration, args);
 
 builder.Services.AddSingleton(_ =>
 {
@@ -25,9 +24,14 @@ builder.Services.AddSingleton(_ =>
     return connections;
 });
 
+var jsonOptions = AppJsonContext.Default.Options;
+
 builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
-    .WithToolsFromAssembly();
+    .WithTools<DatabaseLifecycleTools>(jsonOptions)
+    .WithTools<SchemaTools>(jsonOptions)
+    .WithTools<QueryTools>(jsonOptions)
+    .WithTools<CrudTools>(jsonOptions);
 
 await builder.Build().RunAsync();
