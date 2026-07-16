@@ -12,6 +12,10 @@ alwaysApply: true
 - Tools in `Tools/` stay thin; quoting/validation/SQL execution live in `Sql/`.
 - Native AOT: explicit `WithTools<T>` in `Program.cs`; JSON via `AppJsonContext` source generation (`Json/ToolResponses.cs`).
 
+## Configuration
+
+- Settings file: `{AppContext.BaseDirectory}/appsettings.json` by default; `--config <path>` replaces it (relative paths use process cwd). Explicit `--config` fails if the file is missing.
+
 ## Connection rules
 
 - Default key name: `default`.

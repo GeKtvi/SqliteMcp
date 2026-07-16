@@ -59,6 +59,8 @@ Tool JSON uses source-generated `AppJsonContext`; MCP tools are registered expli
 
 Pass `--default-db` to set the **default database** path. Tools that omit `connectionKey` use connection key `"default"` against this file (lazy-opened on first use). Additional databases still require `open_db` with their own keys.
 
+**Settings file:** by default SqliteMcp loads `appsettings.json` next to the executable (AOT publish folder). Pass `--config <path>` to use a different file instead. Relative paths resolve against the process working directory (useful when the MCP host sets cwd to a project folder).
+
 **Windows**
 
 ```json
@@ -72,7 +74,21 @@ Pass `--default-db` to set the **default database** path. Tools that omit `conne
 }
 ```
 
-The second `--default-db` argument is the default DB file path.
+Project-local settings (cwd = project folder, or use an absolute `--config` path):
+
+```json
+{
+  "mcpServers": {
+    "sqlite": {
+      "command": "C:/path/to/publish/SqliteMcp.exe",
+      "args": [
+        "--default-db", "C:/Techprom ToolBox/lang/english/swbrowser.sldedb",
+        "--config", "appsettings.json"
+      ]
+    }
+  }
+}
+```
 
 **Linux / macOS**
 
@@ -86,8 +102,6 @@ The second `--default-db` argument is the default DB file path.
   }
 }
 ```
-
-The second `--default-db` argument is the default DB file path.
 
 Alternatively, set `DefaultDbPath` in `appsettings.json` instead of `--default-db`. The default path is stored at startup but the file is not opened until the first tool call that needs it, or until `open_db` targets the default slot.
 ## Connection model
@@ -129,7 +143,7 @@ All data tools accept optional `connectionKey`.
 
 ## CLI hooks
 
-Configure optional before/after shell commands in `appsettings.json` under `Hooks`. Each event (`Open`, `Close`, `CloseAll`, `Query`) has `Before` and `After` command strings. Empty = disabled.
+Configure optional before/after shell commands under `Hooks` in the settings file (exe `appsettings.json`, or the file passed via `--config`). Each event (`Open`, `Close`, `CloseAll`, `Query`) has `Before` and `After` command strings. Empty = disabled.
 
 ```json
 {
@@ -147,7 +161,7 @@ Configure optional before/after shell commands in `appsettings.json` under `Hook
 
 **Timeout:** optional `TimeSpan` at `Hooks:Timeout` and per-event `Timeout` (e.g. `"00:01:00"`). Omit = wait until the CLI process exits (no kill). Per-event overrides root.
 
-**Behavior:** hooks run synchronously after/before the MCP action. Non-zero exit or timeout is logged (stderr + file) as non-fatal; the MCP tool still succeeds. Reused `open_db` (same key + path) skips Open hooks. `close_all` runs `CloseAll.Before`, then per-connection `Close.Before` / `Close.After`, then `CloseAll.After`. Changing `Hooks` in `appsettings.json` applies on the next hook run without restart.
+**Behavior:** hooks run synchronously after/before the MCP action. Non-zero exit or timeout is logged (stderr + file) as non-fatal; the MCP tool still succeeds. Reused `open_db` (same key + path) skips Open hooks. `close_all` runs `CloseAll.Before`, then per-connection `Close.Before` / `Close.After`, then `CloseAll.After`. Changing `Hooks` in the loaded settings file applies on the next hook run without restart.
 
 Commands run via `cmd /c` (Windows) or `/bin/sh -c` (Linux/macOS).
 

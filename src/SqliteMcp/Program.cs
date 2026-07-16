@@ -8,7 +8,15 @@ using SqliteMcp.Json;
 using SqliteMcp.Logging;
 using SqliteMcp.Tools;
 
-var builder = Host.CreateApplicationBuilder(args);
+var settingsPath = AppSettingsPathResolver.Resolve(args);
+
+var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+{
+    Args = args,
+    ContentRootPath = AppContext.BaseDirectory,
+});
+
+AppSettingsConfiguration.Apply(builder, settingsPath);
 
 // MCP uses stdout for JSON-RPC; keep all logs on stderr.
 builder.Logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
@@ -47,6 +55,7 @@ var host = builder.Build();
 var appLogger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("SqliteMcp");
 if (appLogger.IsEnabled(LogLevel.Information))
 {
+    appLogger.LogInformation("Using configuration: {ConfigPath}", settingsPath.Path);
     appLogger.LogInformation("File logging to {LogFilePath}", logFilePath);
     if (!string.IsNullOrWhiteSpace(defaultDbPath))
     {

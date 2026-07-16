@@ -22,7 +22,8 @@ Call `close_db` or `close_all` before deleting/moving a DB file (required on all
 - Never write logs to stdout (stdio MCP); logging goes to stderr only.
 - CRUD must validate table/column names and reject empty update/delete conditions.
 - Do not invent MCP “sessions” on top of stdio; keys are connection handles, not chat sessions.
-- Optional CLI hooks (`Hooks` in config): before/after shell commands for `open_db`, `close_db`, `close_all`, `query`; non-fatal; optional `TimeSpan` timeout (omit = no limit). Hook options reload via `IOptionsMonitor` when `appsettings.json` changes.
+- Settings file: default `{AppContext.BaseDirectory}/appsettings.json`; override with `--config <path>` (relative paths use process cwd). Explicit `--config` fails if the file is missing.
+- Optional CLI hooks (`Hooks` in config): before/after shell commands for `open_db`, `close_db`, `close_all`, `query`; non-fatal; optional `TimeSpan` timeout (omit = no limit). Hook options reload via `IOptionsMonitor` when the settings file changes.
 - Logging: console → stderr only; file logging via NReco (`Logging:File` in `appsettings.json`, rolling size/count). Edit `Logging:LogLevel` at runtime. If the default log file is locked, fall back to `sqlite-mcp-{pid}.log`.
 
 ## AOT / JSON
