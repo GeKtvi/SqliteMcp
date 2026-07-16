@@ -143,13 +143,16 @@ public sealed class CliHookRunner(IOptions<HookOptions> options, ILogger<CliHook
         return new ProcessStartInfo
         {
             FileName = "/bin/sh",
-            Arguments = $"-c {command}",
+            Arguments = $"-c {QuoteForShSingleQuoted(command)}",
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true
         };
     }
+
+    internal static string QuoteForShSingleQuoted(string value) =>
+        "'" + value.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
 
     private HookEventOptions GetEventOptions(HookEventKind eventKind) =>
         eventKind switch

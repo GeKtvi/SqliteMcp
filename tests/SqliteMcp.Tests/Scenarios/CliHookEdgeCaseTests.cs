@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using SqliteMcp.Tests.Infrastructure;
+using TUnit.Core.Enums;
 
 namespace SqliteMcp.Tests.Scenarios;
 
@@ -233,6 +234,30 @@ public class CliHookEdgeCaseTests
     }
 
     [Test]
+    public async Task CliHookRunner_QuoteForShSingleQuoted_WrapsCommand()
+    {
+        var quoted = CliHookRunner.QuoteForShSingleQuoted("printf '%s' '/tmp/my db/app.db'");
+
+        await Assert.That(quoted.StartsWith("'")).IsTrue();
+        await Assert.That(quoted.EndsWith("'")).IsTrue();
+        await Assert.That(quoted).Contains("my db/app.db");
+    }
+
+    [Test]
+    public async Task CloseDb_RemovesConnectionFromRegistry()
+    {
+        using var harness = McpToolHarness.CreateEmpty();
+        var dbPath = harness.DbPath("lock-test.db");
+        harness.Lifecycle.OpenDb(dbPath, "main");
+
+        await Assert.That(harness.Connections.ListConnections()).Count().IsEqualTo(1);
+
+        harness.Lifecycle.CloseDb("main");
+
+        await Assert.That(harness.Connections.ListConnections()).IsEmpty();
+    }
+
+    [Test, RunOn(OS.Windows)]
     public async Task CloseDb_FileLockedBeforeClose_UnlockedAfter()
     {
         using var harness = McpToolHarness.CreateEmpty();
