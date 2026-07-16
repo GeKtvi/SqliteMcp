@@ -53,8 +53,6 @@ public sealed class CliHookRunner(IOptionsMonitor<HookOptions> options, ILogger<
         {
             StartInfo = CreateStartInfo(command)
         };
-        process.OutputDataReceived += static (_, _) => { };
-        process.ErrorDataReceived += static (_, _) => { };
 
         if (!process.Start())
         {
@@ -64,10 +62,6 @@ public sealed class CliHookRunner(IOptionsMonitor<HookOptions> options, ILogger<
                 phase);
             return;
         }
-
-        // Drain without capturing — keeps MCP stdout clean; script output is ignored.
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
 
         var exited = timeout is null
             ? WaitForExit(process)
@@ -146,8 +140,6 @@ public sealed class CliHookRunner(IOptionsMonitor<HookOptions> options, ILogger<
                 FileName = "cmd.exe",
                 Arguments = $"/c {command}",
                 UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
                 CreateNoWindow = true
             };
         }
@@ -156,8 +148,6 @@ public sealed class CliHookRunner(IOptionsMonitor<HookOptions> options, ILogger<
         {
             FileName = "/bin/sh",
             UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
             CreateNoWindow = true
         };
         startInfo.ArgumentList.Add("-c");

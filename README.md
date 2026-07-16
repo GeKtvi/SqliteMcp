@@ -161,7 +161,7 @@ Configure optional before/after shell commands under `Hooks` in the settings fil
 
 **Timeout:** optional `TimeSpan` at `Hooks:Timeout` and per-event `Timeout` (e.g. `"00:01:00"`). Omit = wait until the CLI process exits (no kill). Per-event overrides root.
 
-**Behavior:** hooks run synchronously after/before the MCP action. Child stdout/stderr are redirected and discarded (not logged). Non-zero exit or timeout is logged as non-fatal; the MCP tool still succeeds. Reused `open_db` (same key + path) skips Open hooks. `close_all` runs `CloseAll.Before`, then per-connection `Close.Before` / `Close.After`, then `CloseAll.After`. Changing `Hooks` in the loaded settings file applies on the next hook run without restart.
+**Behavior:** hooks run synchronously after/before the MCP action (no stdout/stderr capture). Non-zero exit or timeout is logged as non-fatal; the MCP tool still succeeds. Prefer hooks that log to their own files and print little to stdout. Reused `open_db` (same key + path) skips Open hooks. `close_all` runs `CloseAll.Before`, then per-connection `Close.Before` / `Close.After`, then `CloseAll.After`. Changing `Hooks` in the loaded settings file applies on the next hook run without restart.
 
 Commands run via `cmd /c` (Windows) or `/bin/sh -c` (Linux/macOS).
 
