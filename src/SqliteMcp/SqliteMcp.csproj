@@ -8,7 +8,7 @@
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
     <RootNamespace>SqliteMcp</RootNamespace>
-    <Version>1.0.2</Version>
+    <Version>1.0.3</Version>
     <UserSecretsId>58210704-b509-4e6d-a1eb-072c3ee59e59</UserSecretsId>
   </PropertyGroup>
 
