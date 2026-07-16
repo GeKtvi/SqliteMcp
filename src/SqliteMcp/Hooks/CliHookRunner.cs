@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -52,25 +51,10 @@ public sealed class CliHookRunner(IOptionsMonitor<HookOptions> options, ILogger<
 
         using var process = new Process
         {
-            StartInfo = CreateStartInfo(command),
-            EnableRaisingEvents = true
+            StartInfo = CreateStartInfo(command)
         };
-
-        var output = new StringBuilder();
-        process.OutputDataReceived += (_, e) =>
-        {
-            if (e.Data is not null)
-            {
-                output.AppendLine(e.Data);
-            }
-        };
-        process.ErrorDataReceived += (_, e) =>
-        {
-            if (e.Data is not null)
-            {
-                output.AppendLine(e.Data);
-            }
-        };
+        process.OutputDataReceived += static (_, _) => { };
+        process.ErrorDataReceived += static (_, _) => { };
 
         if (!process.Start())
         {
@@ -81,6 +65,7 @@ public sealed class CliHookRunner(IOptionsMonitor<HookOptions> options, ILogger<
             return;
         }
 
+        // Drain without capturing — keeps MCP stdout clean; script output is ignored.
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
@@ -106,11 +91,10 @@ public sealed class CliHookRunner(IOptionsMonitor<HookOptions> options, ILogger<
             }
 
             logger.LogWarning(
-                "[HOOK] {EventKind}.{Phase} timed out after {Timeout} (non-fatal). Output: {Output}",
+                "[HOOK] {EventKind}.{Phase} timed out after {Timeout} (non-fatal).",
                 eventKind,
                 phase,
-                timeout,
-                output.ToString().Trim());
+                timeout);
             return;
         }
 
@@ -119,11 +103,10 @@ public sealed class CliHookRunner(IOptionsMonitor<HookOptions> options, ILogger<
         if (process.ExitCode != 0)
         {
             logger.LogWarning(
-                "[HOOK] {EventKind}.{Phase} exited with code {ExitCode} (non-fatal). Output: {Output}",
+                "[HOOK] {EventKind}.{Phase} exited with code {ExitCode} (non-fatal).",
                 eventKind,
                 phase,
-                process.ExitCode,
-                output.ToString().Trim());
+                process.ExitCode);
             return;
         }
 
