@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SqliteMcp;
+using SqliteMcp.Hooks;
 using SqliteMcp.Json;
 using SqliteMcp.Tools;
 
@@ -11,6 +12,9 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
 
 var defaultDbPath = DefaultDbPathResolver.Resolve(builder.Configuration, args);
+
+builder.Services.Configure<HookOptions>(builder.Configuration.GetSection("Hooks"));
+builder.Services.AddSingleton<ICliHookRunner, CliHookRunner>();
 
 builder.Services.AddSingleton(_ =>
 {

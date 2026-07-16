@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
+using SqliteMcp.Hooks;
 using SqliteMcp.Json;
 using SqliteMcp.Sql;
 
@@ -10,7 +11,7 @@ namespace SqliteMcp.Tools;
 /// MCP tool for executing raw SQL with optional parameters.
 /// </summary>
 [McpServerToolType]
-public sealed class QueryTools(SqliteConnectionManager connections)
+public sealed class QueryTools(SqliteConnectionManager connections, ICliHookRunner hooks)
 {
     /// <summary>Runs SQL; SELECT-like statements return rows, others return change metadata.</summary>
     [McpServerTool(Name = "query"), Description(
@@ -22,16 +23,30 @@ public sealed class QueryTools(SqliteConnectionManager connections)
         [Description("Connection key. Omit to use the default database.")] string? connectionKey = null)
     {
         var entry = connections.GetConnection(connectionKey);
-        var bound = ParseValues(values);
+        var context = new HookContext
+        {
+            ConnectionKey = entry.Key,
+            DbPath = entry.Path,
+            Sql = sql
+        };
 
+        hooks.Run(HookEventKind.Query, HookPhase.Before, context);
+
+        var bound = ParseValues(values);
+        string resultJson;
         if (SqliteCommandRunner.LooksLikeSelect(sql))
         {
             var rows = SqliteCommandRunner.Query(entry.Connection, sql, bound);
-            return SqliteCommandRunner.ToJson(rows);
+            resultJson = SqliteCommandRunner.ToJson(rows);
+        }
+        else
+        {
+            var result = SqliteCommandRunner.Execute(entry.Connection, sql, bound);
+            resultJson = SqliteCommandRunner.ToJson(result, AppJsonContext.Default.DmlResult);
         }
 
-        var result = SqliteCommandRunner.Execute(entry.Connection, sql, bound);
-        return SqliteCommandRunner.ToJson(result, AppJsonContext.Default.DmlResult);
+        hooks.Run(HookEventKind.Query, HookPhase.After, context);
+        return resultJson;
     }
 
     /// <summary>Converts an optional JSON array of SQL parameter values to CLR objects.</summary>

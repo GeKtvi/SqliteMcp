@@ -85,7 +85,7 @@ public static class SqliteCommandRunner
             || trimmed.StartsWith("EXPLAIN", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static JsonNode? ToJsonNode(object? value) => value switch
+    private static JsonValue? ToJsonNode(object? value) => value switch
     {
         null => null,
         string s => JsonValue.Create(s),

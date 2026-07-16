@@ -15,6 +15,7 @@ This project is designed for my own use, but anyone is welcome to use it. Feel f
 - `open_db` / `close_db` / `close_all` to manage and release file locks
 - Node-parity tools: `query`, `list_tables`, `get_table_schema`, CRUD helpers
 - Identifier validation for CRUD (table/column checks, quoted identifiers)
+- Optional CLI lifecycle hooks (`Hooks` in `appsettings.json`) for `open_db`, `close_db`, `close_all`, and `query`
 
 ## Platform
 
@@ -124,6 +125,30 @@ After close, the SQLite file can be deleted, moved, or used by another process o
 | `create_record` / `read_records` / `update_records` / `delete_records` | CRUD; update/delete reject empty conditions |
 
 All data tools accept optional `connectionKey`.
+
+## CLI hooks
+
+Configure optional before/after shell commands in `appsettings.json` under `Hooks`. Each event (`Open`, `Close`, `CloseAll`, `Query`) has `Before` and `After` command strings. Empty = disabled.
+
+```json
+{
+  "Hooks": {
+    "Timeout": "00:00:30",
+    "Open": { "Before": "", "After": "echo opened {connectionKey}" },
+    "Close": { "Before": "", "After": "" },
+    "CloseAll": { "Before": "", "After": "" },
+    "Query": { "Before": "", "After": "" }
+  }
+}
+```
+
+**Placeholders:** `{connectionKey}`, `{dbPath}`, `{sql}` (query only, truncated), `{closedKeys}` (close_all only).
+
+**Timeout:** optional `TimeSpan` at `Hooks:Timeout` and per-event `Timeout` (e.g. `"00:01:00"`). Omit = wait until the CLI process exits (no kill). Per-event overrides root.
+
+**Behavior:** hooks run synchronously after/before the MCP action. Non-zero exit or timeout is logged to stderr only; the MCP tool still succeeds. Reused `open_db` (same key + path) skips Open hooks. `close_all` runs `CloseAll.Before`, then per-connection `Close.Before` / `Close.After`, then `CloseAll.After`.
+
+Commands run via `cmd /c` (Windows) or `/bin/sh -c` (Linux/macOS).
 
 ## Example agent flow
 

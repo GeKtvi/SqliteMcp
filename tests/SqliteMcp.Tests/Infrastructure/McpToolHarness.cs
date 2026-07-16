@@ -1,7 +1,3 @@
-using System.Text.Json;
-using SqliteMcp;
-using SqliteMcp.Tools;
-
 namespace SqliteMcp.Tests.Infrastructure;
 
 /// <summary>
@@ -11,17 +7,23 @@ public sealed class McpToolHarness : IDisposable
 {
     private bool _disposed;
 
-    private McpToolHarness(SqliteConnectionManager connections, string tempDirectory)
+    private McpToolHarness(
+        SqliteConnectionManager connections,
+        string tempDirectory,
+        ICliHookRunner hooks)
     {
         Connections = connections;
         TempDirectory = tempDirectory;
-        Lifecycle = new DatabaseLifecycleTools(connections);
-        Query = new QueryTools(connections);
+        Hooks = hooks;
+        Lifecycle = new DatabaseLifecycleTools(connections, hooks);
+        Query = new QueryTools(connections, hooks);
         Schema = new SchemaTools(connections);
         Crud = new CrudTools(connections);
     }
 
     public SqliteConnectionManager Connections { get; }
+
+    public ICliHookRunner Hooks { get; }
 
     public DatabaseLifecycleTools Lifecycle { get; }
 
@@ -31,19 +33,21 @@ public sealed class McpToolHarness : IDisposable
 
     public CrudTools Crud { get; }
 
-    public static McpToolHarness CreateWithDefaultPath(string? dbFileName = null)
+    public static McpToolHarness CreateWithDefaultPath(
+        string? dbFileName = null,
+        ICliHookRunner? hooks = null)
     {
         var tempDirectory = CreateTempDirectory();
         var dbPath = Path.Combine(tempDirectory, dbFileName ?? "default.db");
         var connections = new SqliteConnectionManager();
         connections.SetDefaultPath(dbPath);
-        return new McpToolHarness(connections, tempDirectory);
+        return new McpToolHarness(connections, tempDirectory, hooks ?? NoOpCliHookRunner.Instance);
     }
 
-    public static McpToolHarness CreateEmpty()
+    public static McpToolHarness CreateEmpty(ICliHookRunner? hooks = null)
     {
         var tempDirectory = CreateTempDirectory();
-        return new McpToolHarness(new SqliteConnectionManager(), tempDirectory);
+        return new McpToolHarness(new SqliteConnectionManager(), tempDirectory, hooks ?? NoOpCliHookRunner.Instance);
     }
 
     public string DbPath(string fileName = "default.db") => Path.Combine(TempDirectory, fileName);

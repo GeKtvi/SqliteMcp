@@ -39,7 +39,7 @@ public sealed class CrudTools(SqliteConnectionManager connections)
         var result = SqliteCommandRunner.Execute(
             entry.Connection,
             sql,
-            columns.Select(c => record[c]).ToList());
+            [.. columns.Select(c => record[c])]);
 
         return SqliteCommandRunner.ToJson(
             new CreateRecordResult("Record created successfully", result.LastInsertRowId),

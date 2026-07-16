@@ -14,7 +14,7 @@ public sealed class SqliteConnectionManager : IDisposable
     public const string DefaultKey = "default";
 
     private readonly ConcurrentDictionary<string, ConnectionEntry> _connections = new(StringComparer.Ordinal);
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private string? _defaultPath;
 
     /// <summary>
@@ -41,47 +41,28 @@ public sealed class SqliteConnectionManager : IDisposable
     /// Opens a database under <paramref name="connectionKey"/> (or <see cref="DefaultKey"/> if omitted).
     /// Reuses an existing entry when the key and path match; throws if the key is bound to a different path.
     /// </summary>
-    public ConnectionEntry Open(string path, string? connectionKey = null)
+    /// <param name="beforeCreate">
+    /// Invoked only when this call is about to create a new connection (outside the connection lock).
+    /// If another thread opens the same key between the pre-check and create, this may still have run;
+    /// callers that run a matching After when this fired keep Before/After paired.
+    /// </param>
+    public OpenResult Open(string path, string? connectionKey = null, Action? beforeCreate = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        var key = string.IsNullOrWhiteSpace(connectionKey) ? DefaultKey : connectionKey.Trim();
-        var normalizedPath = NormalizePath(path);
-
-        lock (_gate)
+        using (_gate.EnterScope())
         {
-            if (_connections.TryGetValue(key, out var existing))
+            if (TryGetReuseOrThrow(path, connectionKey, out var reused))
             {
-                if (!PathsEqual(existing.Path, normalizedPath))
-                {
-                    throw new InvalidOperationException(
-                        $"Connection key '{key}' is already open for '{existing.Path}'. " +
-                        $"Cannot open '{normalizedPath}' with the same key. Close it first or use a different key.");
-                }
-
-                return existing;
+                return reused;
             }
+        }
 
-            var connection = OpenConnection(normalizedPath);
-            var entry = new ConnectionEntry
-            {
-                Key = key,
-                Path = normalizedPath,
-                Connection = connection
-            };
+        beforeCreate?.Invoke();
 
-            if (!_connections.TryAdd(key, entry))
-            {
-                connection.Dispose();
-                throw new InvalidOperationException($"Failed to register connection key '{key}'.");
-            }
-
-            if (key == DefaultKey)
-            {
-                _defaultPath = normalizedPath;
-            }
-
-            return entry;
+        using (_gate.EnterScope())
+        {
+            return OpenCore(path, connectionKey);
         }
     }
 
@@ -92,7 +73,7 @@ public sealed class SqliteConnectionManager : IDisposable
     /// </summary>
     public ConnectionEntry GetConnection(string? connectionKey = null)
     {
-        lock (_gate)
+        using (_gate.EnterScope())
         {
             if (!string.IsNullOrWhiteSpace(connectionKey))
             {
@@ -118,19 +99,20 @@ public sealed class SqliteConnectionManager : IDisposable
                     "Pass --default-db / DefaultDbPath at startup, or call open_db with a path and connectionKey.");
             }
 
-            return Open(_defaultPath, DefaultKey);
+            return OpenCore(_defaultPath, DefaultKey).Entry;
         }
     }
 
     /// <summary>
-    /// Disposes one connection and removes it from the dictionary, unlocking the file.
-    /// Omitting the key targets the default slot. Configured <see cref="DefaultPath"/> is kept.
+    /// Resolves an already-open connection for close hooks without lazy-opening the default.
     /// </summary>
-    public CloseDbResult Close(string? connectionKey = null)
+    internal bool TryGetOpenConnectionPath(
+        string? connectionKey,
+        out string key,
+        out string path)
     {
-        lock (_gate)
+        using (_gate.EnterScope())
         {
-            string key;
             if (!string.IsNullOrWhiteSpace(connectionKey))
             {
                 key = connectionKey.Trim();
@@ -141,21 +123,61 @@ public sealed class SqliteConnectionManager : IDisposable
             }
             else
             {
-                throw new InvalidOperationException(
-                    "No connectionKey provided and no default database is configured.");
+                key = DefaultKey;
+                path = "";
+                return false;
+            }
+
+            if (!_connections.TryGetValue(key, out var entry))
+            {
+                path = "";
+                return false;
+            }
+
+            path = entry.Path;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Disposes one connection and removes it from the dictionary, unlocking the file.
+    /// Omitting the key targets the default slot. Configured <see cref="DefaultPath"/> is kept.
+    /// </summary>
+    public CloseDbResult Close(string? connectionKey = null)
+    {
+        if (!TryClose(connectionKey, out var result))
+        {
+            throw CreateNotOpenException(connectionKey);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Closes a connection when it is still open. Returns false without throwing when the key is absent.
+    /// </summary>
+    public bool TryClose(string? connectionKey, out CloseDbResult result)
+    {
+        using (_gate.EnterScope())
+        {
+            if (!TryResolveCloseKey(connectionKey, out var key, out _))
+            {
+                result = default!;
+                return false;
             }
 
             if (!_connections.TryRemove(key, out var entry))
             {
-                throw new InvalidOperationException(
-                    $"No open connection for key '{key}'.");
+                result = default!;
+                return false;
             }
 
             entry.Dispose();
-            return new CloseDbResult(
+            result = new CloseDbResult(
                 $"Closed connection '{key}'.",
                 key,
                 entry.Path);
+            return true;
         }
     }
 
@@ -164,10 +186,10 @@ public sealed class SqliteConnectionManager : IDisposable
     /// </summary>
     public CloseAllResult CloseAll()
     {
-        lock (_gate)
+        using (_gate.EnterScope())
         {
-            var closed = new List<ClosedConnectionInfo>();
-            foreach (var key in _connections.Keys.ToArray())
+            List<ClosedConnectionInfo> closed = [];
+            foreach (var key in (string[])[.. _connections.Keys])
             {
                 if (_connections.TryRemove(key, out var entry))
                 {
@@ -187,16 +209,72 @@ public sealed class SqliteConnectionManager : IDisposable
     /// </summary>
     public IReadOnlyList<ConnectionInfo> ListConnections()
     {
-        return _connections.Values
-            .OrderBy(e => e.Key, StringComparer.Ordinal)
-            .Select(e => new ConnectionInfo(e.Key, e.Path, e.Key == DefaultKey))
-            .ToList();
+        using (_gate.EnterScope())
+        {
+            return [.. _connections.Values
+                .OrderBy(e => e.Key, StringComparer.Ordinal)
+                .Select(e => new ConnectionInfo(e.Key, e.Path, e.Key == DefaultKey))];
+        }
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
         CloseAll();
+    }
+
+    private bool TryGetReuseOrThrow(string path, string? connectionKey, out OpenResult reused)
+    {
+        var key = string.IsNullOrWhiteSpace(connectionKey) ? DefaultKey : connectionKey.Trim();
+        var normalizedPath = NormalizePath(path);
+
+        if (!_connections.TryGetValue(key, out var existing))
+        {
+            reused = default;
+            return false;
+        }
+
+        if (!PathsEqual(existing.Path, normalizedPath))
+        {
+            throw new InvalidOperationException(
+                $"Connection key '{key}' is already open for '{existing.Path}'. " +
+                $"Cannot open '{normalizedPath}' with the same key. Close it first or use a different key.");
+        }
+
+        reused = new OpenResult(existing, WasReused: true);
+        return true;
+    }
+
+    private OpenResult OpenCore(string path, string? connectionKey)
+    {
+        if (TryGetReuseOrThrow(path, connectionKey, out var reused))
+        {
+            return reused;
+        }
+
+        var key = string.IsNullOrWhiteSpace(connectionKey) ? DefaultKey : connectionKey.Trim();
+        var normalizedPath = NormalizePath(path);
+
+        var connection = OpenConnection(normalizedPath);
+        var entry = new ConnectionEntry
+        {
+            Key = key,
+            Path = normalizedPath,
+            Connection = connection
+        };
+
+        if (!_connections.TryAdd(key, entry))
+        {
+            connection.Dispose();
+            throw new InvalidOperationException($"Failed to register connection key '{key}'.");
+        }
+
+        if (key == DefaultKey)
+        {
+            _defaultPath = normalizedPath;
+        }
+
+        return new OpenResult(entry, WasReused: false);
     }
 
     /// <summary>
@@ -232,5 +310,42 @@ public sealed class SqliteConnectionManager : IDisposable
         return string.Equals(a, b, OperatingSystem.IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal);
+    }
+
+    private bool TryResolveCloseKey(string? connectionKey, out string key, out bool missingConfiguredDefault)
+    {
+        if (!string.IsNullOrWhiteSpace(connectionKey))
+        {
+            key = connectionKey.Trim();
+            missingConfiguredDefault = false;
+            return true;
+        }
+
+        if (_connections.ContainsKey(DefaultKey) || _defaultPath is not null)
+        {
+            key = DefaultKey;
+            missingConfiguredDefault = false;
+            return true;
+        }
+
+        key = DefaultKey;
+        missingConfiguredDefault = true;
+        return false;
+    }
+
+    private InvalidOperationException CreateNotOpenException(string? connectionKey)
+    {
+        using (_gate.EnterScope())
+        {
+            if (!TryResolveCloseKey(connectionKey, out var key, out var missingConfiguredDefault))
+            {
+                return new InvalidOperationException(
+                    "No connectionKey provided and no default database is configured.");
+            }
+
+            _ = missingConfiguredDefault;
+            return new InvalidOperationException(
+                $"No open connection for key '{key}'.");
+        }
     }
 }

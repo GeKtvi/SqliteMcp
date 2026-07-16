@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Configuration;
-using SqliteMcp;
 
 namespace SqliteMcp.Tests.Connection;
 

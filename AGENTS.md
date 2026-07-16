@@ -22,6 +22,7 @@ Call `close_db` or `close_all` before deleting/moving a DB file (required on all
 - Never write logs to stdout (stdio MCP); logging goes to stderr only.
 - CRUD must validate table/column names and reject empty update/delete conditions.
 - Do not invent MCP “sessions” on top of stdio; keys are connection handles, not chat sessions.
+- Optional CLI hooks (`Hooks` in config): before/after shell commands for `open_db`, `close_db`, `close_all`, `query`; non-fatal; optional `TimeSpan` timeout (omit = no limit).
 
 ## AOT / JSON
 
