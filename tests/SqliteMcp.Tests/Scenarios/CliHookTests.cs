@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using SqliteMcp.Tests.Infrastructure;
 
 namespace SqliteMcp.Tests.Scenarios;
@@ -207,7 +206,7 @@ public class CliHookTests
     [Test]
     public async Task CliHookRunner_NonZeroExit_DoesNotThrowFromTool()
     {
-        var options = Options.Create(new HookOptions
+        var options = new TestOptionsMonitor<HookOptions>(new HookOptions
         {
             Query = new HookEventOptions
             {
@@ -228,7 +227,7 @@ public class CliHookTests
     [Test]
     public async Task CliHookRunner_Timeout_DoesNotThrowFromTool()
     {
-        var options = Options.Create(new HookOptions
+        var options = new TestOptionsMonitor<HookOptions>(new HookOptions
         {
             Timeout = TimeSpan.FromMilliseconds(200),
             Query = new HookEventOptions
@@ -245,5 +244,45 @@ public class CliHookTests
         var json = harness.Query.Query("SELECT 1");
 
         await Assert.That(json).Contains("1");
+    }
+
+    [Test]
+    public async Task CliHookRunner_PicksUpHookOptionsChange_WithoutRestart()
+    {
+        var markerPath = Path.Combine(Path.GetTempPath(), "sqlite-mcp-hook-reload-" + Guid.NewGuid().ToString("N") + ".txt");
+        try
+        {
+            var monitor = new TestOptionsMonitor<HookOptions>(new HookOptions
+            {
+                Query = new HookEventOptions { Before = "" }
+            });
+            var runner = new CliHookRunner(monitor, NullLogger<CliHookRunner>.Instance);
+
+            runner.Run(HookEventKind.Query, HookPhase.Before, new HookContext { Sql = "SELECT 1" });
+            await Assert.That(File.Exists(markerPath)).IsFalse();
+
+            monitor.Set(new HookOptions
+            {
+                Query = new HookEventOptions
+                {
+                    Before = HookTestCommands.WriteFixedTextToFile(markerPath, "reloaded")
+                }
+            });
+
+            runner.Run(HookEventKind.Query, HookPhase.Before, new HookContext { Sql = "SELECT 1" });
+
+            await Assert.That(File.Exists(markerPath)).IsTrue();
+            await Assert.That(await File.ReadAllTextAsync(markerPath)).IsEqualTo("reloaded");
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(markerPath);
+            }
+            catch (IOException)
+            {
+            }
+        }
     }
 }

@@ -16,6 +16,7 @@ This project is designed for my own use, but anyone is welcome to use it. Feel f
 - Node-parity tools: `query`, `list_tables`, `get_table_schema`, CRUD helpers
 - Identifier validation for CRUD (table/column checks, quoted identifiers)
 - Optional CLI lifecycle hooks (`Hooks` in `appsettings.json`) for `open_db`, `close_db`, `close_all`, and `query`
+- File logging (NReco) + stderr console; editable log levels; `appsettings.json` reload for Hooks and log levels
 
 ## Platform
 
@@ -146,7 +147,7 @@ Configure optional before/after shell commands in `appsettings.json` under `Hook
 
 **Timeout:** optional `TimeSpan` at `Hooks:Timeout` and per-event `Timeout` (e.g. `"00:01:00"`). Omit = wait until the CLI process exits (no kill). Per-event overrides root.
 
-**Behavior:** hooks run synchronously after/before the MCP action. Non-zero exit or timeout is logged to stderr only; the MCP tool still succeeds. Reused `open_db` (same key + path) skips Open hooks. `close_all` runs `CloseAll.Before`, then per-connection `Close.Before` / `Close.After`, then `CloseAll.After`.
+**Behavior:** hooks run synchronously after/before the MCP action. Non-zero exit or timeout is logged (stderr + file) as non-fatal; the MCP tool still succeeds. Reused `open_db` (same key + path) skips Open hooks. `close_all` runs `CloseAll.Before`, then per-connection `Close.Before` / `Close.After`, then `CloseAll.After`. Changing `Hooks` in `appsettings.json` applies on the next hook run without restart.
 
 Commands run via `cmd /c` (Windows) or `/bin/sh -c` (Linux/macOS).
 

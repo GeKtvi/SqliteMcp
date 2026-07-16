@@ -25,6 +25,11 @@ internal static class HookTestCommands
             ? $"powershell -NoProfile -Command \"[IO.File]::WriteAllText('{EscapeForPowerShellSingleQuoted(targetFile)}', '{{dbPath}}')\""
             : $"printf %s \"{{dbPath}}\" > \"{EscapeForShDoubleQuoted(targetFile)}\"";
 
+    public static string WriteFixedTextToFile(string targetFile, string text) =>
+        OperatingSystem.IsWindows()
+            ? $"powershell -NoProfile -Command \"[IO.File]::WriteAllText('{EscapeForPowerShellSingleQuoted(targetFile)}', '{EscapeForPowerShellSingleQuoted(text)}')\""
+            : $"printf %s \"{EscapeForShDoubleQuoted(text)}\" > \"{EscapeForShDoubleQuoted(targetFile)}\"";
+
     public static string TryDeleteFile() =>
         OperatingSystem.IsWindows()
             ? "del /f /q \"{dbPath}\" 2>nul"
@@ -41,7 +46,4 @@ internal static class HookTestCommands
     private static string EscapeForShDoubleQuoted(string value) =>
         value.Replace("\\", "\\\\", StringComparison.Ordinal)
             .Replace("\"", "\\\"", StringComparison.Ordinal);
-
-    private static string EscapeForShSingleQuoted(string value) =>
-        value.Replace("'", "'\"'\"'", StringComparison.Ordinal);
 }

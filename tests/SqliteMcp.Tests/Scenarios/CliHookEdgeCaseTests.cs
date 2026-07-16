@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using SqliteMcp.Tests.Infrastructure;
 using TUnit.Core.Enums;
 
@@ -10,7 +9,7 @@ namespace SqliteMcp.Tests.Scenarios;
 public class CliHookEdgeCaseTests
 {
     private static CliHookRunner CreateRunner(HookOptions options) =>
-        new(Options.Create(options), NullLogger<CliHookRunner>.Instance);
+        new(new TestOptionsMonitor<HookOptions>(options), NullLogger<CliHookRunner>.Instance);
 
     // --- Critical: hang / MCP I/O ---
 
@@ -238,8 +237,8 @@ public class CliHookEdgeCaseTests
     {
         var quoted = CliHookRunner.QuoteForShSingleQuoted("printf '%s' '/tmp/my db/app.db'");
 
-        await Assert.That(quoted.StartsWith("'")).IsTrue();
-        await Assert.That(quoted.EndsWith("'")).IsTrue();
+        await Assert.That(quoted.StartsWith('\'')).IsTrue();
+        await Assert.That(quoted.EndsWith('\'')).IsTrue();
         await Assert.That(quoted).Contains("my db/app.db");
     }
 

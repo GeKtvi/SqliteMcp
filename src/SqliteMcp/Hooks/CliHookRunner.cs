@@ -5,15 +5,15 @@ using Microsoft.Extensions.Options;
 
 namespace SqliteMcp.Hooks;
 
-public sealed class CliHookRunner(IOptions<HookOptions> options, ILogger<CliHookRunner> logger) : ICliHookRunner
+public sealed class CliHookRunner(IOptionsMonitor<HookOptions> options, ILogger<CliHookRunner> logger) : ICliHookRunner
 {
     private const int MaxSqlPlaceholderLength = 2000;
-
-    private readonly HookOptions _options = options.Value;
+    private const int MaxCommandLogLength = 500;
 
     public void Run(HookEventKind eventKind, HookPhase phase, HookContext context)
     {
-        var eventOptions = GetEventOptions(eventKind);
+        var current = options.CurrentValue;
+        var eventOptions = GetEventOptions(current, eventKind);
         var command = phase == HookPhase.Before ? eventOptions.Before : eventOptions.After;
         if (string.IsNullOrWhiteSpace(command))
         {
@@ -21,7 +21,7 @@ public sealed class CliHookRunner(IOptions<HookOptions> options, ILogger<CliHook
         }
 
         var resolvedCommand = ApplyPlaceholders(command, context);
-        var timeout = eventOptions.Timeout ?? _options.Timeout;
+        var timeout = eventOptions.Timeout ?? current.Timeout;
 
         try
         {
@@ -31,7 +31,7 @@ public sealed class CliHookRunner(IOptions<HookOptions> options, ILogger<CliHook
         {
             logger.LogWarning(
                 ex,
-                "Hook {EventKind}.{Phase} failed (non-fatal).",
+                "[HOOK] {EventKind}.{Phase} failed (non-fatal).",
                 eventKind,
                 phase);
         }
@@ -39,6 +39,17 @@ public sealed class CliHookRunner(IOptions<HookOptions> options, ILogger<CliHook
 
     private void ExecuteCommand(HookEventKind eventKind, HookPhase phase, string command, TimeSpan? timeout)
     {
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            logger.LogInformation(
+                "[HOOK] {EventKind}.{Phase} starting. Command: {Command}",
+                eventKind,
+                phase,
+                TruncateForLog(command));
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+
         using var process = new Process
         {
             StartInfo = CreateStartInfo(command),
@@ -64,7 +75,7 @@ public sealed class CliHookRunner(IOptions<HookOptions> options, ILogger<CliHook
         if (!process.Start())
         {
             logger.LogWarning(
-                "Hook {EventKind}.{Phase} could not start process (non-fatal).",
+                "[HOOK] {EventKind}.{Phase} could not start process (non-fatal).",
                 eventKind,
                 phase);
             return;
@@ -87,7 +98,7 @@ public sealed class CliHookRunner(IOptions<HookOptions> options, ILogger<CliHook
             {
                 logger.LogWarning(
                     ex,
-                    "Hook {EventKind}.{Phase} timed out after {Timeout} and could not be killed (non-fatal).",
+                    "[HOOK] {EventKind}.{Phase} timed out after {Timeout} and could not be killed (non-fatal).",
                     eventKind,
                     phase,
                     timeout);
@@ -95,7 +106,7 @@ public sealed class CliHookRunner(IOptions<HookOptions> options, ILogger<CliHook
             }
 
             logger.LogWarning(
-                "Hook {EventKind}.{Phase} timed out after {Timeout} (non-fatal). Output: {Output}",
+                "[HOOK] {EventKind}.{Phase} timed out after {Timeout} (non-fatal). Output: {Output}",
                 eventKind,
                 phase,
                 timeout,
@@ -103,16 +114,34 @@ public sealed class CliHookRunner(IOptions<HookOptions> options, ILogger<CliHook
             return;
         }
 
+        stopwatch.Stop();
+
         if (process.ExitCode != 0)
         {
             logger.LogWarning(
-                "Hook {EventKind}.{Phase} exited with code {ExitCode} (non-fatal). Output: {Output}",
+                "[HOOK] {EventKind}.{Phase} exited with code {ExitCode} (non-fatal). Output: {Output}",
                 eventKind,
                 phase,
                 process.ExitCode,
                 output.ToString().Trim());
+            return;
+        }
+
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            logger.LogInformation(
+                "[HOOK] {EventKind}.{Phase} exit={ExitCode} elapsedMs={ElapsedMs}",
+                eventKind,
+                phase,
+                process.ExitCode,
+                stopwatch.ElapsedMilliseconds);
         }
     }
+
+    private static string TruncateForLog(string command) =>
+        command.Length <= MaxCommandLogLength
+            ? command
+            : command[..MaxCommandLogLength] + "...";
 
     private static bool WaitForExit(Process process)
     {
@@ -160,13 +189,13 @@ public sealed class CliHookRunner(IOptions<HookOptions> options, ILogger<CliHook
     internal static string QuoteForShSingleQuoted(string value) =>
         "'" + value.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
 
-    private HookEventOptions GetEventOptions(HookEventKind eventKind) =>
+    private static HookEventOptions GetEventOptions(HookOptions options, HookEventKind eventKind) =>
         eventKind switch
         {
-            HookEventKind.Open => _options.Open,
-            HookEventKind.Close => _options.Close,
-            HookEventKind.CloseAll => _options.CloseAll,
-            HookEventKind.Query => _options.Query,
+            HookEventKind.Open => options.Open,
+            HookEventKind.Close => options.Close,
+            HookEventKind.CloseAll => options.CloseAll,
+            HookEventKind.Query => options.Query,
             _ => throw new ArgumentOutOfRangeException(nameof(eventKind), eventKind, null)
         };
 
