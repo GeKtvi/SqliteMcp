@@ -100,37 +100,6 @@ public class CliHookEdgeCaseTests
     }
 
     [Test]
-    public async Task CliHookRunner_WritesDbPathToFile_OnCurrentOs()
-    {
-        var traceFile = Path.Combine(Path.GetTempPath(), "sqlite-mcp-hook-" + Guid.NewGuid().ToString("N"), "open-trace.txt");
-        Directory.CreateDirectory(Path.GetDirectoryName(traceFile)!);
-        try
-        {
-            var runner = CreateRunner(new HookOptions
-            {
-                Open = new HookEventOptions
-                {
-                    After = HookTestCommands.WriteTextToFile(traceFile)
-                }
-            });
-            using var harness = McpToolHarness.CreateEmpty(hooks: runner);
-            var dbPath = harness.DbPath("app.db");
-
-            harness.Lifecycle.OpenDb(dbPath, "main");
-
-            await Assert.That(File.Exists(traceFile)).IsTrue();
-            await Assert.That(File.ReadAllText(traceFile)).IsEqualTo(Path.GetFullPath(dbPath));
-        }
-        finally
-        {
-            if (Directory.Exists(Path.GetDirectoryName(traceFile)!))
-            {
-                Directory.Delete(Path.GetDirectoryName(traceFile)!, recursive: true);
-            }
-        }
-    }
-
-    [Test, RunOn(OS.Windows)]
     public async Task CliHookRunner_DbPathWithSpaces_WrittenByHook()
     {
         var traceFile = Path.Combine(Path.GetTempPath(), "sqlite-mcp-hook-" + Guid.NewGuid().ToString("N"), "open-trace.txt");

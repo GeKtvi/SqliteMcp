@@ -140,17 +140,23 @@ public sealed class CliHookRunner(IOptions<HookOptions> options, ILogger<CliHook
             };
         }
 
-        return new ProcessStartInfo
+        var startInfo = new ProcessStartInfo
         {
             FileName = "/bin/sh",
-            Arguments = $"-c {QuoteForShSingleQuoted(command)}",
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true
         };
+        startInfo.ArgumentList.Add("-c");
+        startInfo.ArgumentList.Add(command);
+        return startInfo;
     }
 
+    /// <summary>
+    /// Escapes a value for embedding inside a single-quoted POSIX shell literal (test helper).
+    /// Production hook execution passes the full command via <see cref="ProcessStartInfo.ArgumentList"/>.
+    /// </summary>
     internal static string QuoteForShSingleQuoted(string value) =>
         "'" + value.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
 
